@@ -8,7 +8,7 @@ Your request have to include a "cmd" field containing the command you want to ex
 - `localhost:5000/status` using `GET` method (always return "stop" for the test API)
 
 ## Usage
-Example with /gps (it's basiccaly the same thing for /lidar and /status):
+Example with /gps (it's basicaly the same thing for /lidar and /status):
 ```javascript
 fetch("http://localhost:5000/gps")
   .then(res => res.json())
