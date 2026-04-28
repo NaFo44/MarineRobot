@@ -1,4 +1,4 @@
-# Marin Robot
+# Marine Robot
 
 This project include a test API to test the controller:
 - `localhost:5000/gps` using `GET` method
