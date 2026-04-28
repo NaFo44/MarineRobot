@@ -27,7 +27,7 @@ fetch("http://localhost:5000/command", {
     "Content-Type": "application/json"
   },
   body: JSON.stringify({
-    cmd: "stop" // left, right, stop
+    cmd: "stop" // forward, backward, rotate_left, rotate_right, turn_left, turn_right, stop
   })
 })
   .then(res => res.json())
