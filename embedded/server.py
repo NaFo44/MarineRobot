@@ -1,10 +1,15 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
 import gps, lidar, motor
 
 app = Flask(__name__)
 
 gps.start_gps()
 lidar.start_lidar()
+
+@app.route("/")
+def index():
+    return send_from_directory("P:/SIN/MarineRobot/controller/", "index.html")
 
 @app.route("/gps")
 def gps_route():

@@ -1,9 +1,27 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
-gps_data = '{ "lat": 43.2965, "lon": 5.3698, "sat": None, "alt": None }'
-lidar_data = '{ "speed": 5.72, "timestamp": 18342, "points": [(12.5, 1.23, 210), (13.0, 1.25, 198), (13.5, 1.22, 205), (14.0, 1.30, 180), (14.5, 1.28, 175)]}'
+gps_data = {
+    "lat": 43.2965,
+    "lon": 5.3698,
+    "sat": None,
+    "alt": None
+}
+
+lidar_data = {
+    "speed": 5.72,
+    "timestamp": 18342,
+    "points": [
+        [12.5, 1.23, 210],
+        [13.0, 1.25, 198],
+        [13.5, 1.22, 205],
+        [14.0, 1.30, 180],
+        [14.5, 1.28, 175]
+    ]
+}
 
 @app.route("/gps")
 def gps_route():

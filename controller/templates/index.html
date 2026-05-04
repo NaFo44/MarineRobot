@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Interface Carte</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Leaflet (carte type OpenStreetMap) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<link rel="stylesheet" href="/static/style.css">
+
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Panneau GPS -->
+<div class="control-panel">
+  <div class="buttons">
+    <div></div>
+    <div class="btn" onclick="sendCommand('forward')">▲</div>
+    <div></div>
+
+    <div class="btn" onclick="sendCommand('turn_left')">◀</div>
+    <div class="btn" onclick="sendCommand('stop')">●</div>
+    <div class="btn" onclick="sendCommand('turn_right')">▶</div>
+
+    <div></div>
+    <div class="btn" onclick="sendCommand('backward')">▼</div>
+    <div></div>
+  </div>
+</div>
+
+<div class="toggle">
+  Manuel / Autonome
+  <div class="switch" id="switch"></div>
+</div>
+<div class="gps" id="gps">GPS : ...</div>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script src="/static/script.js"></script>
+</body>
+</html>
