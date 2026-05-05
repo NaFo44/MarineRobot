@@ -112,7 +112,7 @@ function updateLidar(points, baseLat, baseLon) {
 }
 
 function fetchLidar() {
-  fetch("http://localhost:5000/lidar")
+  fetch("http://192.168.50.1:5000/lidar")
     .then(res => res.json())
     .then(data => {
       console.log("LIDAR:", data);
