@@ -8,10 +8,6 @@ CORS(app)
 gps.start_gps()
 lidar.start_lidar()
 
-@app.route("/")
-def index():
-    return send_from_directory("P:/SIN/MarineRobot/controller/", "index.html")
-
 @app.route("/gps")
 def gps_route():
     return jsonify(gps.get_gps_data())
@@ -22,11 +18,9 @@ def lidar_route():
 
 @app.route("/command", methods=["POST"])
 def command():
-    data = request.json
+    data = request.json or {}
     cmd = data.get("cmd")
-
-    result = motor.execute_command(cmd)
-    return jsonify(result)
+    return jsonify(motor.execute_command(cmd))
 
 @app.route("/status")
 def status():
