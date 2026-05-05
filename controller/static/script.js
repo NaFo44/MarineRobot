@@ -65,6 +65,12 @@ document.addEventListener("keydown", (e) => {
     case "ArrowRight":
       sendCommand("right");
       break;
+    case "ArrowUp":
+      sendCommand("forward");
+      break;
+    case "ArrowDown":
+      sendCommand("backward");
+      break;
     case " ":
       sendCommand("stop");
       break;
