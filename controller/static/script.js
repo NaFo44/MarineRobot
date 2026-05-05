@@ -59,17 +59,11 @@ function sendCommand(cmd) {
 
 document.addEventListener("keydown", (e) => {
   switch (e.key) {
-    case "ArrowUp":
-      sendCommand("forward");
-      break;
-    case "ArrowDown":
-      sendCommand("backward");
-      break;
     case "ArrowLeft":
-      sendCommand("turn_left");
+      sendCommand("left");
       break;
     case "ArrowRight":
-      sendCommand("turn_right");
+      sendCommand("right");
       break;
     case " ":
       sendCommand("stop");
