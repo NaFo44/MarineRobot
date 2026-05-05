@@ -2,12 +2,19 @@ const API_BASE_URL = "http://192.168.50.1:5000";
 const canvas = document.getElementById("lidar-view");
 const ctx = canvas.getContext("2d");
 
-const MIN_VIEW_RANGE_METERS = 6;
-const MAX_VIEW_RANGE_METERS = 60;
+const LIDAR_FETCH_INTERVAL_MS = 120;
+const POINT_PERSISTENCE_MS = 1800;
+const VIEW_RANGE_METERS = 18;
+const LIDAR_ROTATION_OFFSET_DEG = -90;
+const MAX_LIDAR_DISTANCE_METERS = 35;
+const LIDAR_POINT_ORDER = "auto"; // auto | angle-distance | distance-angle
 
-let currentLidarPoints = [];
+let lidarTrail = [];
+let lastFramePoints = [];
 let lastLat = null;
 let lastLng = null;
+let pointOrder = null;
+let isLidarFetchInFlight = false;
 
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -19,8 +26,6 @@ function resizeCanvas() {
   canvas.width = Math.floor(width * dpr);
   canvas.height = Math.floor(height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-  drawLidarScene();
 }
 
 window.addEventListener("resize", resizeCanvas);
@@ -39,8 +44,6 @@ function fetchGPS() {
   fetch(`${API_BASE_URL}/gps`)
     .then(res => res.json())
     .then(data => {
-      console.log("GPS recu:", data);
-
       if (typeof data.lat === "number" && typeof data.lon === "number") {
         updateGPS(data.lat, data.lon);
       }
@@ -86,17 +89,41 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-function scorePointInterpretation(distance, angle) {
-  let score = 0;
+function toDegrees(value) {
+  if (Math.abs(value) <= (Math.PI * 2 + 0.01)) {
+    return value * (180 / Math.PI);
+  }
+  return value;
+}
 
-  if (distance >= 0 && distance <= 120) score += 3;
-  else if (distance >= 0) score += 1;
+function normalizeDegrees(deg) {
+  const normalized = deg % 360;
+  return normalized < 0 ? normalized + 360 : normalized;
+}
 
-  if (Math.abs(angle) <= (Math.PI * 2 + 0.01) || (angle >= 0 && angle <= 360)) {
-    score += 2;
+function detectPointOrder(rawPoints) {
+  if (!Array.isArray(rawPoints) || rawPoints.length === 0) {
+    return "angle-distance";
   }
 
-  return score;
+  let scoreAngleDistance = 0;
+  let scoreDistanceAngle = 0;
+
+  rawPoints.forEach((p) => {
+    if (!Array.isArray(p) || p.length < 2) return;
+    const a = Number(p[0]);
+    const b = Number(p[1]);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return;
+
+    if (b >= 0 && b <= MAX_LIDAR_DISTANCE_METERS) scoreAngleDistance += 2;
+    if (a >= 0 && a <= MAX_LIDAR_DISTANCE_METERS) scoreDistanceAngle += 2;
+    if (a >= 0 && a <= 360) scoreAngleDistance += 1;
+    if (b >= 0 && b <= 360) scoreDistanceAngle += 1;
+  });
+
+  return scoreDistanceAngle > scoreAngleDistance
+    ? "distance-angle"
+    : "angle-distance";
 }
 
 function parseLidarPoint(rawPoint) {
@@ -110,47 +137,55 @@ function parseLidarPoint(rawPoint) {
     return null;
   }
 
-  const scoreDistanceFirst = scorePointInterpretation(a, b);
-  const scoreAngleFirst = scorePointInterpretation(b, a);
+  const distance = pointOrder === "distance-angle" ? a : b;
+  const rawAngle = pointOrder === "distance-angle" ? b : a;
+  if (!Number.isFinite(distance) || distance < 0 || distance > MAX_LIDAR_DISTANCE_METERS) {
+    return null;
+  }
 
-  const distance = scoreAngleFirst > scoreDistanceFirst ? b : a;
-  const angle = scoreAngleFirst > scoreDistanceFirst ? a : b;
-  const angleRad = Math.abs(angle) <= (Math.PI * 2 + 0.01) ? angle : angle * Math.PI / 180;
+  const angleDeg = normalizeDegrees(toDegrees(rawAngle) + LIDAR_ROTATION_OFFSET_DEG);
+  const angleRad = angleDeg * Math.PI / 180;
 
   return {
-    distance: Math.max(0, distance),
-    angleRad: angleRad,
-    intensity: intensity
+    distance,
+    angleRad,
+    intensity
   };
 }
 
-function getViewRangeMeters(points) {
-  if (points.length === 0) return MIN_VIEW_RANGE_METERS;
-
-  const farthestDistance = Math.max(...points.map(point => point.distance));
-  const paddedRange = farthestDistance * 1.2;
-
-  return Math.max(
-    MIN_VIEW_RANGE_METERS,
-    Math.min(MAX_VIEW_RANGE_METERS, paddedRange)
-  );
+function pruneTrail(now) {
+  lidarTrail = lidarTrail.filter(p => (now - p.timestamp) <= POINT_PERSISTENCE_MS);
 }
 
-function drawLidarScene() {
+function pushFramePoints(points) {
+  const now = performance.now();
+  lastFramePoints = points;
+
+  points.forEach((point) => {
+    lidarTrail.push({
+      ...point,
+      timestamp: now
+    });
+  });
+
+  pruneTrail(now);
+}
+
+function drawLidarScene(now) {
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
   const centerX = width / 2;
   const centerY = height / 2;
-  const viewRange = getViewRangeMeters(currentLidarPoints);
   const maxRadiusPx = Math.min(width, height) * 0.45;
-  const metersToPixels = maxRadiusPx / viewRange;
+  const metersToPixels = maxRadiusPx / VIEW_RANGE_METERS;
+
+  pruneTrail(now);
 
   ctx.fillStyle = "#101317";
   ctx.fillRect(0, 0, width, height);
 
   ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
   ctx.lineWidth = 1;
-
   for (let i = 1; i <= 4; i += 1) {
     const ringRadius = (maxRadiusPx * i) / 4;
     ctx.beginPath();
@@ -165,14 +200,19 @@ function drawLidarScene() {
   ctx.lineTo(centerX, centerY + maxRadiusPx);
   ctx.stroke();
 
-  currentLidarPoints.forEach(point => {
+  lidarTrail.forEach((point) => {
+    const age = now - point.timestamp;
+    const alpha = Math.max(0, 1 - (age / POINT_PERSISTENCE_MS));
     const x = centerX + Math.cos(point.angleRad) * point.distance * metersToPixels;
     const y = centerY - Math.sin(point.angleRad) * point.distance * metersToPixels;
-    const color = point.intensity > 200 ? "#ff5f5f" : "#f5b141";
+
+    const color = point.intensity > 200
+      ? `rgba(255, 95, 95, ${0.2 + 0.8 * alpha})`
+      : `rgba(245, 177, 65, ${0.2 + 0.8 * alpha})`;
 
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.arc(x, y, 2 + alpha * 1.5, 0, Math.PI * 2);
     ctx.fill();
   });
 
@@ -190,27 +230,45 @@ function drawLidarScene() {
 
   ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
   ctx.font = "13px Arial, sans-serif";
-  ctx.fillText(`Portee: ${viewRange.toFixed(1)} m`, 16, 24);
-  ctx.fillText(`Points: ${currentLidarPoints.length}`, 16, 44);
+  ctx.fillText(`Portee fixe: ${VIEW_RANGE_METERS.toFixed(1)} m`, 16, 24);
+  ctx.fillText(`Points frame: ${lastFramePoints.length}`, 16, 44);
+  ctx.fillText(`Points persistants: ${lidarTrail.length}`, 16, 64);
+}
+
+function renderLoop(now) {
+  drawLidarScene(now);
+  requestAnimationFrame(renderLoop);
 }
 
 function fetchLidar() {
+  if (isLidarFetchInFlight) return;
+  isLidarFetchInFlight = true;
+
   fetch(`${API_BASE_URL}/lidar`)
     .then(res => res.json())
     .then(data => {
-      console.log("LIDAR:", data);
-
       if (data.points && Array.isArray(data.points)) {
-        currentLidarPoints = data.points
+        if (!pointOrder && data.points.length > 0) {
+          pointOrder = LIDAR_POINT_ORDER === "auto"
+            ? detectPointOrder(data.points)
+            : LIDAR_POINT_ORDER;
+        }
+
+        const parsedPoints = data.points
           .map(parseLidarPoint)
           .filter(point => point !== null);
-        drawLidarScene();
+
+        pushFramePoints(parsedPoints);
       }
     })
-    .catch(err => console.error("Erreur LIDAR:", err));
+    .catch(err => console.error("Erreur LIDAR:", err))
+    .finally(() => {
+      isLidarFetchInFlight = false;
+    });
 }
 
-setInterval(fetchLidar, 500);
+setInterval(fetchLidar, LIDAR_FETCH_INTERVAL_MS);
+fetchLidar();
 
 const sw = document.getElementById("switch");
 sw.addEventListener("click", () => {
@@ -218,4 +276,4 @@ sw.addEventListener("click", () => {
 });
 
 resizeCanvas();
-drawLidarScene();
+requestAnimationFrame(renderLoop);
