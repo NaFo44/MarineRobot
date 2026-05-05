@@ -1,17 +1,12 @@
 import serial
 import struct
 import threading
+import time
 
 PORT = '/dev/serial0'
 BAUDRATE = 230400
 FRAME_SIZE = 47
 POINTS_PER_FRAME = 12
-
-lidar_data = {
-    "speed": 0,
-    "timestamp": 0,
-    "points": []  # angle, distance, confidence
-}
 
 CRC_TABLE = [
     0x00,0x4d,0x9a,0xd7,0x79,0x34,0xe3,0xae,0xf2,0xbf,0x68,0x25,
@@ -38,24 +33,42 @@ CRC_TABLE = [
     0x7f,0x32,0xe5,0xa8
 ]
 
+lidar_data = {
+    "speed": 0,
+    "timestamp": 0,
+    "points": [],
+    "last_update": 0,
+    "status": "offline"
+}
+
+lock = threading.Lock()
+
+
 def calc_crc8(data):
-    crc = 0x00
-    for byte in data:
-        crc = CRC_TABLE[crc ^ byte]
+    crc = 0
+    for b in data:
+        crc = CRC_TABLE[crc ^ b]
     return crc
 
+
 def read_frame(ser, buffer):
-    buffer += ser.read(128)
+    buffer += ser.read(256)
 
-    while len(buffer) >= FRAME_SIZE:
-        if buffer[0] == 0x54 and buffer[1] == 0x2C:
-            frame = buffer[:FRAME_SIZE]
-            buffer = buffer[FRAME_SIZE:]
-            return frame, buffer
-        else:
-            buffer = buffer[1:]
+    while True:
+        idx = buffer.find(b'\x54\x2C')
 
-    return None, buffer
+        if idx == -1:
+            buffer.clear()
+            return None, buffer
+
+        if len(buffer) < idx + FRAME_SIZE:
+            return None, buffer
+
+        frame = buffer[idx:idx + FRAME_SIZE]
+        buffer = buffer[idx + FRAME_SIZE:]
+
+        return frame, buffer
+
 
 def parse_frame(frame):
     if len(frame) != FRAME_SIZE:
@@ -70,7 +83,7 @@ def parse_frame(frame):
     timestamp = struct.unpack('<H', frame[44:46])[0]
 
     diff = (end_angle - start_angle) % 360
-    angle_step = diff / (POINTS_PER_FRAME - 1)
+    step = diff / (POINTS_PER_FRAME - 1)
 
     points = []
 
@@ -78,41 +91,57 @@ def parse_frame(frame):
         offset = 6 + i * 3
         distance = struct.unpack('<H', frame[offset:offset+2])[0] / 1000
         confidence = frame[offset+2]
-        angle = (start_angle + i * angle_step) % 360
+        angle = (start_angle + i * step) % 360
 
         points.append((angle, distance, confidence))
 
     return speed, timestamp, points
 
+
 def lidar_loop():
     global lidar_data
 
-    with serial.Serial(PORT, BAUDRATE, timeout=0.1) as ser:
-        buffer = bytearray()
+    try:
+        ser = serial.Serial(PORT, BAUDRATE, timeout=0.1)
+    except Exception as e:
+        print("Serial error:", e)
+        return
 
-        while True:
-            frame, buffer = read_frame(ser, buffer)
+    buffer = bytearray()
 
-            if frame is None:
-                continue
+    while True:
+        frame, buffer = read_frame(ser, buffer)
 
-            parsed = parse_frame(frame)
-            if parsed is None:
-                continue
+        if frame is None:
+            continue
 
-            speed, timestamp, points = parsed
+        parsed = parse_frame(frame)
+        if parsed is None:
+            continue
 
+        speed, timestamp, points = parsed
+
+        with lock:
             lidar_data["speed"] = speed
             lidar_data["timestamp"] = timestamp
+            lidar_data["points"] = points
+            lidar_data["last_update"] = time.time()
+            lidar_data["status"] = "online"
 
-            lidar_data["points"].extend(points)
-
-            if len(lidar_data["points"]) > 360:
-                lidar_data["points"] = lidar_data["points"][-360:]
 
 def start_lidar():
-    thread = threading.Thread(target=lidar_loop, daemon=True)
-    thread.start()
+    t = threading.Thread(target=lidar_loop, daemon=True)
+    t.start()
+
 
 def get_lidar_data():
-    return lidar_data
+    with lock:
+        if time.time() - lidar_data["last_update"] > 1.0:
+            return {
+                "speed": 0,
+                "timestamp": 0,
+                "points": [],
+                "status": "offline"
+            }
+
+        return lidar_data
