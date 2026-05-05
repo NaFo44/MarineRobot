@@ -12,8 +12,8 @@ current_state = "stop"
 
 def right():
     global current_state
-    pi.set_servo_pulsewidth(ESC1, 2000)
-    pi.set_servo_pulsewidth(ESC2, 1300)
+    pi.set_servo_pulsewidth(ESC1, 1000)
+    pi.set_servo_pulsewidth(ESC2, 1700)
     current_state = "right"
 
 def left():
