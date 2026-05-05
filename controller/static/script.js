@@ -27,7 +27,7 @@ function updateMap(lat, lng) {
 }
 
 function fetchGPS() {
-  fetch("http://localhost:5000/gps")
+  fetch("http://192.168.50.1:5000/gps")
     .then(res => res.json())
     .then(data => {
       console.log("GPS reçu:", data);
@@ -43,7 +43,7 @@ setInterval(fetchGPS, 2000);
 updateGPS(48.8566, 2.3522);
 
 function sendCommand(cmd) {
-  fetch("http://localhost:5000/command", {
+  fetch("http://192.168.50.1:5000/command", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
