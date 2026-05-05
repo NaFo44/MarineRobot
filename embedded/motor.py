@@ -24,14 +24,14 @@ def left():
 
 def forward():
     global current_state
-    pi.set_servo_pulsewidth(ESC1, 2000)
-    pi.set_servo_pulsewidth(ESC2, 1000)
+    pi.set_servo_pulsewidth(ESC1, 1000)
+    pi.set_servo_pulsewidth(ESC2, 2000)
     current_state = "forward"
 
 def backward():
     global current_state
-    pi.set_servo_pulsewidth(ESC1, 1000)
-    pi.set_servo_pulsewidth(ESC2, 2000)
+    pi.set_servo_pulsewidth(ESC1, 2000)
+    pi.set_servo_pulsewidth(ESC2, 1000)
     current_state = "backward"
 
 def stop():
