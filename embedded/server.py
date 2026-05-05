@@ -3,6 +3,7 @@ from flask_cors import CORS
 import gps, lidar, motor
 
 app = Flask(__name__)
+CORS(app)
 
 gps.start_gps()
 lidar.start_lidar()
